@@ -3,7 +3,7 @@ from __future__ import annotations
 from decimal import Decimal
 
 import pytest
-from pydantic import TypeAdapter
+from pydantic import BaseModel, TypeAdapter
 from pydantic import ValidationError as PydanticValidationError
 
 from finschema.errors import (
@@ -15,6 +15,10 @@ from finschema.errors import (
 from finschema.types import Money
 
 
+class _MoneyModel(BaseModel):
+    notional: Money
+
+
 def test_money_valid() -> None:
     money = Money(amount=1000.50, currency="EUR")
     assert money.amount == Decimal("1000.50")
@@ -24,7 +28,7 @@ def test_money_valid() -> None:
 def test_money_precision_for_jpy() -> None:
     with pytest.raises(PrecisionError) as exc:
         Money(amount=1000.55, currency="JPY")
-    assert exc.value.details["max_decimals"] == 0
+    assert exc.value.details["expected"] == "<= 0 decimals"
 
 
 def test_money_currency_mismatch() -> None:
@@ -71,6 +75,15 @@ def test_money_non_finite_amount() -> None:
 
 def test_money_repr() -> None:
     assert repr(Money("10.00", "EUR")) == "Money(10.00 EUR)"
+
+
+def test_money_str_format() -> None:
+    assert str(Money("1000.5", "EUR")) == "1,000.50 EUR"
+
+
+def test_money_to_dict_serialization() -> None:
+    model = _MoneyModel(notional={"amount": "1000.50", "currency": "EUR"})
+    assert model.model_dump() == {"notional": {"amount": "1000.50", "currency": "EUR"}}
 
 
 def test_money_type_adapter_accepts_money_instance() -> None:

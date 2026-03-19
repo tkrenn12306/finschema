@@ -7,7 +7,7 @@ from pydantic import TypeAdapter
 from pydantic import ValidationError as PydanticValidationError
 
 from finschema.errors import InvalidFormatError, NotBusinessDayError
-from finschema.types import BusinessDate
+from finschema.types import BusinessDate, Tenor
 
 
 def test_business_date_weekday() -> None:
@@ -44,3 +44,10 @@ def test_business_date_type_adapter_paths() -> None:
     assert adapter.validate_python(date(2026, 3, 20)).isoformat() == "2026-03-20"
     with pytest.raises(PydanticValidationError):
         adapter.validate_python(123)
+
+
+def test_tenor_values() -> None:
+    assert Tenor("ON").days == 1
+    assert Tenor("3M").days == 90
+    with pytest.raises(InvalidFormatError):
+        Tenor("13M")

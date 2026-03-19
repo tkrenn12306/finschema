@@ -32,6 +32,17 @@ _IBAN_LENGTHS: dict[str, int] = {
     "SE": 24,
 }
 
+_IBAN_BBAN_RE: dict[str, re.Pattern[str]] = {
+    "AT": re.compile(r"^[0-9]{16}$"),
+    "CH": re.compile(r"^[0-9]{5}[A-Z0-9]{12}$"),
+    "DE": re.compile(r"^[0-9]{18}$"),
+    "ES": re.compile(r"^[0-9]{20}$"),
+    "FR": re.compile(r"^[0-9]{10}[A-Z0-9]{11}[0-9]{2}$"),
+    "GB": re.compile(r"^[A-Z]{4}[0-9]{14}$"),
+    "IT": re.compile(r"^[A-Z][0-9]{10}[A-Z0-9]{12}$"),
+    "NL": re.compile(r"^[A-Z]{4}[0-9]{10}$"),
+}
+
 
 def _alpha_to_numeric(value: str) -> str:
     out: list[str] = []
@@ -71,9 +82,14 @@ class IBAN(PydanticStrMixin, str):
                 f"Unknown country code {country!r} in IBAN",
                 details={"country_code": country},
             )
+        if country not in _IBAN_LENGTHS:
+            raise InvalidCountryError(
+                f"Country code {country!r} does not support ISO IBAN",
+                details={"country_code": country, "rule": "iban_supported_country"},
+            )
 
-        expected_len = _IBAN_LENGTHS.get(country)
-        if expected_len is not None and len(normalized) != expected_len:
+        expected_len = _IBAN_LENGTHS[country]
+        if len(normalized) != expected_len:
             raise InvalidFormatError(
                 "Invalid IBAN length",
                 details={
@@ -83,7 +99,19 @@ class IBAN(PydanticStrMixin, str):
                 },
             )
 
-        expected = compute_iban_check_digits(country, normalized[4:])
+        bban = normalized[4:]
+        bban_pattern = _IBAN_BBAN_RE.get(country)
+        if bban_pattern is not None and not bban_pattern.fullmatch(bban):
+            raise InvalidFormatError(
+                "Invalid IBAN BBAN format",
+                details={
+                    "country_code": country,
+                    "expected_bban_pattern": bban_pattern.pattern,
+                    "actual_bban": bban,
+                },
+            )
+
+        expected = compute_iban_check_digits(country, bban)
         actual = normalized[2:4]
         if expected != actual:
             raise CheckDigitError(

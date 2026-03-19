@@ -1,0 +1,16 @@
+site_name: finschema
+site_description: Financial validation types and schemas for Python
+repo_url: https://github.com/tkrenn12306/finschema
+theme:
+  name: material
+nav:
+  - Home: docs/index.md
+  - Getting Started: docs/getting-started.md
+  - API: docs/api.md
+plugins:
+  - search
+  - mkdocstrings:
+      handlers:
+        python:
+          options:
+            show_source: false

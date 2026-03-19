@@ -7,7 +7,8 @@ from hypothesis import given
 from hypothesis import strategies as st
 
 from finschema.errors import CheckDigitError
-from finschema.types import CUSIP, ISIN, LEI, SEDOL
+from finschema.types import CUSIP, IBAN, ISIN, LEI, SEDOL
+from finschema.types.banking import compute_iban_check_digits
 from finschema.types.identifiers import (
     compute_cusip_check_digit,
     compute_isin_check_digit,
@@ -67,3 +68,14 @@ def test_lei_check_digit_property(body: str) -> None:
     invalid = body + check[:-1] + str(last_digit)
     with pytest.raises(CheckDigitError):
         LEI(invalid)
+
+
+@given(bban=st.text(alphabet=string.digits, min_size=18, max_size=18))
+def test_iban_check_digit_property(bban: str) -> None:
+    check = compute_iban_check_digits("DE", bban)
+    valid = f"DE{check}{bban}"
+    assert IBAN(valid) == valid
+
+    invalid = f"DE00{bban}"
+    with pytest.raises(CheckDigitError):
+        IBAN(invalid)

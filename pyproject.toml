@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "finschema"
-version = "0.3.0"
+version = "0.4.0"
 description = "Pydantic-compatible financial data types and validators"
 readme = "README.md"
 license = "MIT"
@@ -26,8 +26,7 @@ classifiers = [
   "Topic :: Software Development :: Libraries :: Python Modules"
 ]
 dependencies = [
-  "pydantic>=2.7,<3.0",
-  "typer>=0.12,<1.0"
+  "pydantic>=2.7,<3.0"
 ]
 
 [project.optional-dependencies]
@@ -42,6 +41,10 @@ dev = [
   "mypy>=1.11",
   "ruff>=0.6",
   "pre-commit>=3.7"
+]
+docs = [
+  "mkdocs-material>=9.5",
+  "mkdocstrings[python]>=0.26"
 ]
 
 [project.scripts]

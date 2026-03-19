@@ -20,6 +20,10 @@ _ISIN_RE = re.compile(r"^[A-Z]{2}[A-Z0-9]{9}[0-9]$")
 _CUSIP_RE = re.compile(r"^[A-Z0-9*@#]{8}[0-9]$")
 _SEDOL_RE = re.compile(r"^[0-9BCDFGHJKLMNPQRSTVWXYZ]{6}[0-9]$")
 _LEI_RE = re.compile(r"^[A-Z0-9]{18}[0-9]{2}$")
+_FIGI_RE = re.compile(r"^BBG[A-Z0-9]{9}$")
+_VALOR_RE = re.compile(r"^[0-9]{6,9}$")
+_WKN_RE = re.compile(r"^[A-Z0-9]{6}$")
+_RIC_RE = re.compile(r"^[A-Z0-9._-]{1,24}(\.[A-Z0-9]{1,4})?$")
 
 
 def _expand_alpha_numeric(value: str) -> str:
@@ -179,5 +183,75 @@ class LEI(PydanticStrMixin, str):
                     "actual": actual,
                     "algorithm": "MOD-97-10 (ISO 17442)",
                 },
+            )
+        return str.__new__(cls, normalized)
+
+
+class FIGI(PydanticStrMixin, str):
+    def __new__(cls, value: str) -> FIGI:
+        normalized = value.upper().strip()
+        if not _FIGI_RE.fullmatch(normalized):
+            raise InvalidFormatError(
+                f"{normalized!r} is not a valid FIGI",
+                details={"expected": "12 characters starting with BBG"},
+            )
+        return str.__new__(cls, normalized)
+
+
+class VALOR(PydanticStrMixin, str):
+    def __new__(cls, value: str) -> VALOR:
+        normalized = value.strip()
+        if not _VALOR_RE.fullmatch(normalized):
+            raise InvalidFormatError(
+                f"{normalized!r} is not a valid VALOR",
+                details={"expected": "6 to 9 digits"},
+            )
+        return str.__new__(cls, normalized)
+
+
+class WKN(PydanticStrMixin, str):
+    def __new__(cls, value: str) -> WKN:
+        normalized = value.upper().strip()
+        if not _WKN_RE.fullmatch(normalized):
+            raise InvalidFormatError(
+                f"{normalized!r} is not a valid WKN",
+                details={"expected": "6 alphanumeric characters"},
+            )
+        return str.__new__(cls, normalized)
+
+
+class RIC(PydanticStrMixin, str):
+    def __new__(cls, value: str) -> RIC:
+        normalized = value.upper().strip()
+        if not _RIC_RE.fullmatch(normalized):
+            raise InvalidFormatError(
+                f"{normalized!r} is not a valid RIC",
+                details={"expected": "RIC ticker with optional exchange suffix (e.g. AAPL.OQ)"},
+            )
+        return str.__new__(cls, normalized)
+
+
+class Ticker(PydanticStrMixin, str):
+    DEFAULT_PATTERN = re.compile(r"^[A-Z0-9.]+$")
+    DEFAULT_MAX_LENGTH = 16
+
+    def __new__(
+        cls,
+        value: str,
+        *,
+        max_length: int = DEFAULT_MAX_LENGTH,
+        pattern: re.Pattern[str] | None = None,
+    ) -> Ticker:
+        normalized = value.upper().strip()
+        active_pattern = pattern or cls.DEFAULT_PATTERN
+        if len(normalized) == 0 or len(normalized) > max_length:
+            raise InvalidFormatError(
+                f"{normalized!r} is not a valid ticker length",
+                details={"expected_max_length": max_length, "actual_length": len(normalized)},
+            )
+        if not active_pattern.fullmatch(normalized):
+            raise InvalidFormatError(
+                f"{normalized!r} contains invalid ticker characters",
+                details={"expected_pattern": active_pattern.pattern},
             )
         return str.__new__(cls, normalized)

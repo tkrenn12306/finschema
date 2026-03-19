@@ -1,20 +1,27 @@
 from __future__ import annotations
 
+import argparse
 import csv
 import json
-from collections.abc import Callable
+import sys
 from pathlib import Path
 from typing import Any, cast
 
-import typer
-
 from finschema.errors import ValidationError
 from finschema.quality import ValidationEngine
-from finschema.types import BIC, CUSIP, IBAN, ISIN, LEI, SEDOL, BusinessDate, CurrencyCode
+from finschema.reference import get_country_info
+from finschema.types import (
+    BIC,
+    CUSIP,
+    IBAN,
+    ISIN,
+    LEI,
+    SEDOL,
+    BusinessDate,
+    CurrencyCode,
+)
 
-app = typer.Typer(help="finschema CLI")
-
-_CHECKERS: dict[str, Callable[[str], object]] = {
+_CHECKERS: dict[str, Any] = {
     "isin": ISIN,
     "cusip": CUSIP,
     "sedol": SEDOL,
@@ -31,13 +38,26 @@ _SCHEMAS: dict[str, str] = {
     "portfolio": "Portfolio",
 }
 
+_ANSI = {
+    "red": "\033[31m",
+    "green": "\033[32m",
+    "yellow": "\033[33m",
+    "reset": "\033[0m",
+}
 
-class _CliUsageError(Exception):
+
+class CliUsageError(Exception):
     pass
 
 
-class _CliRuntimeError(Exception):
+class CliRuntimeError(Exception):
     pass
+
+
+def _color(text: str, color: str, *, enabled: bool) -> str:
+    if not enabled:
+        return text
+    return f"{_ANSI[color]}{text}{_ANSI['reset']}"
 
 
 def _resolve_schema_name(raw: str) -> str:
@@ -45,7 +65,7 @@ def _resolve_schema_name(raw: str) -> str:
     value = _SCHEMAS.get(key)
     if value is None:
         allowed = ", ".join(sorted(_SCHEMAS.values()))
-        raise _CliUsageError(f"Unsupported schema '{raw}'. Use one of: {allowed}")
+        raise CliUsageError(f"Unsupported schema '{raw}'. Use one of: {allowed}")
     return value
 
 
@@ -53,7 +73,7 @@ def _detect_format(path: Path, input_format: str) -> str:
     normalized = input_format.strip().lower()
     if normalized != "auto":
         if normalized not in {"csv", "parquet", "jsonl"}:
-            raise _CliUsageError("Unsupported --format. Use one of: auto, csv, parquet, jsonl")
+            raise CliUsageError("Unsupported --format. Use one of: auto, csv, parquet, jsonl")
         return normalized
 
     suffix = path.suffix.lower()
@@ -63,7 +83,7 @@ def _detect_format(path: Path, input_format: str) -> str:
         return "parquet"
     if suffix == ".jsonl":
         return "jsonl"
-    raise _CliUsageError(
+    raise CliUsageError(
         f"Could not detect format for {path}. Use --format with csv, parquet, or jsonl."
     )
 
@@ -84,9 +104,9 @@ def _read_jsonl(path: Path) -> list[dict[str, Any]]:
             try:
                 item = json.loads(line)
             except json.JSONDecodeError as exc:
-                raise _CliRuntimeError(f"Invalid JSON on line {line_number}: {exc}") from exc
+                raise CliRuntimeError(f"Invalid JSON on line {line_number}: {exc}") from exc
             if not isinstance(item, dict):
-                raise _CliRuntimeError(f"Line {line_number} must be a JSON object")
+                raise CliRuntimeError(f"Line {line_number} must be a JSON object")
             records.append(item)
     return records
 
@@ -106,7 +126,7 @@ def _read_parquet(path: Path) -> list[dict[str, Any]]:
         frame = pl.read_parquet(path)
         return frame.to_dicts()
     except Exception as exc:
-        raise _CliRuntimeError(
+        raise CliRuntimeError(
             "Parquet reading requires pandas or polars. Install extras with: "
             "pip install finschema[pandas] or pip install finschema[polars]"
         ) from exc
@@ -120,100 +140,176 @@ def _read_records(path: Path, input_format: str) -> list[dict[str, Any]]:
         return _read_jsonl(path)
     if resolved == "parquet":
         return _read_parquet(path)
-    raise _CliUsageError("Unsupported format")
+    raise CliUsageError("Unsupported format")
 
 
-@app.callback()
-def main_callback() -> None:
-    """finschema CLI."""
+def _identifier_detail(identifier_type: str, validated: Any) -> str:
+    value = str(validated)
+    if identifier_type == "isin":
+        country = get_country_info(value[:2]).name
+        return f"Valid ISIN ({country}, check digit: {value[-1]})"
+    if identifier_type == "cusip":
+        return f"Valid CUSIP (check digit: {value[-1]})"
+    if identifier_type == "sedol":
+        return f"Valid SEDOL (check digit: {value[-1]})"
+    if identifier_type == "lei":
+        return f"Valid LEI (check digits: {value[-2:]})"
+    if identifier_type == "iban":
+        return f"Valid IBAN (country: {value[:2]}, check digits: {value[2:4]})"
+    if identifier_type == "bic":
+        return f"Valid BIC (country: {value[4:6]})"
+    if identifier_type == "currency":
+        return f"Valid CurrencyCode (decimals: {validated.decimals})"
+    if identifier_type == "business-date":
+        return "Valid BusinessDate"
+    return "Valid"
 
 
-@app.command("check")
-def check(identifier_type: str, value: str) -> None:
-    """Validate a single value by finschema type."""
-    checker = _CHECKERS.get(identifier_type.lower().strip())
+def _run_check(args: argparse.Namespace) -> int:
+    identifier_type = args.identifier_type.lower().strip()
+    checker = _CHECKERS.get(identifier_type)
+    color_enabled = not args.no_color
     if checker is None:
-        typer.echo("Unsupported type. Use one of: " + ", ".join(sorted(_CHECKERS.keys())))
-        raise typer.Exit(code=2)
+        raise CliUsageError("Unsupported type. Use one of: " + ", ".join(sorted(_CHECKERS.keys())))
 
+    if args.batch is not None:
+        path = Path(args.batch)
+        if not path.exists() or not path.is_file():
+            raise CliRuntimeError(f"Batch file not found: {path}")
+
+        total = 0
+        valid = 0
+        invalid = 0
+        failures: list[str] = []
+        for line in path.read_text(encoding="utf-8").splitlines():
+            value = line.strip()
+            if not value:
+                continue
+            total += 1
+            try:
+                checker(value)
+            except ValidationError as exc:
+                invalid += 1
+                failures.append(f"{value}: {exc.message}")
+            else:
+                valid += 1
+
+        status = "PASS" if invalid == 0 else "FAIL"
+        color = "green" if invalid == 0 else "red"
+        print(_color(f"{status} batch check ({identifier_type})", color, enabled=color_enabled))
+        print(f"Total: {total} | Valid: {valid} | Invalid: {invalid}")
+        if failures:
+            print("Top issues:")
+            for item in failures[:10]:
+                print(f"  - {item}")
+        return 0 if invalid == 0 else 1
+
+    if not args.value:
+        raise CliUsageError("check requires <value> or --batch <file>")
+    value = args.value
     try:
         validated = checker(value)
     except ValidationError as exc:
-        typer.echo(f"✗ {value}")
-        typer.echo(str(exc))
-        raise typer.Exit(code=1) from exc
+        print(_color(f"✗ {value}", "red", enabled=color_enabled))
+        print(str(exc))
+        return 1
 
-    typer.echo(f"✓ {validated}")
+    detail = _identifier_detail(identifier_type, validated)
+    print(_color(f"✓ {validated} — {detail}", "green", enabled=color_enabled))
+    return 0
 
 
-@app.command("validate")
-def validate(
-    path: str,
-    schema: str = typer.Option(..., "--schema"),
-    input_format: str = typer.Option("auto", "--format"),
-    output: str | None = typer.Option(None, "--output"),
-    output_json: str | None = typer.Option(None, "--output-json"),
-    verbose: bool = typer.Option(False, "--verbose"),
-    min_score: float | None = typer.Option(None, "--min-score"),
-) -> None:
-    """Validate records from file input against a schema."""
+def _run_validate(args: argparse.Namespace) -> int:
+    schema_name = _resolve_schema_name(args.schema)
+    file_path = Path(args.path)
+    if not file_path.exists() or not file_path.is_file():
+        raise CliRuntimeError(f"Input file not found: {file_path}")
+
+    records = _read_records(file_path, args.input_format)
+    engine = ValidationEngine()
+    overrides: dict[str, Any] | None = None
+    if args.min_score is not None:
+        overrides = {"min_score": args.min_score}
+    report = engine.validate(records, schema=schema_name, overrides=overrides)
+
+    stats = report.stats
+    status = "PASS" if report.passed else "FAIL"
+    print(f"finschema validate {file_path}")
+    print(
+        f"Schema: {schema_name} | Records: {stats['total_records']} | "
+        f"Score: {report.score:.4f} | {status}"
+    )
+    print(
+        f"Errors: {len(report.errors)} | Warnings: {len(report.warnings)} | Info: {len(report.info)}"
+    )
+
+    if args.verbose:
+        issues = report.errors + report.warnings + report.info
+        for issue in issues[:20]:
+            location = issue.field if issue.field is not None else "__root__"
+            index = issue.record_index if issue.record_index is not None else "-"
+            print(
+                f"[{issue.severity.value}] row={index} field={location} "
+                f"rule={issue.rule} msg={issue.message}"
+            )
+        if len(issues) > 20:
+            print(f"... truncated {len(issues) - 20} additional issues")
+
+    if args.output is not None:
+        report.to_html(args.output)
+        print(f"Saved HTML report to: {args.output}")
+    if args.output_json is not None:
+        report.to_json(args.output_json)
+        print(f"Saved JSON report to: {args.output_json}")
+
+    return 0 if report.passed else 1
+
+
+def _build_parser() -> argparse.ArgumentParser:
+    parser = argparse.ArgumentParser(prog="finschema", description="finschema CLI")
+    sub = parser.add_subparsers(dest="command")
+
+    check = sub.add_parser("check", help="Validate single values or a batch file")
+    check.add_argument(
+        "identifier_type", help="isin|cusip|sedol|lei|iban|bic|currency|business-date"
+    )
+    check.add_argument("value", nargs="?", default="", help="Value to validate")
+    check.add_argument("--batch", dest="batch", default=None, help="Batch file, one value per line")
+    check.add_argument("--no-color", action="store_true", help="Disable ANSI colors")
+
+    validate = sub.add_parser("validate", help="Validate records from file input")
+    validate.add_argument("path", help="CSV, JSONL, or Parquet file")
+    validate.add_argument("--schema", required=True, help="Trade|Position|Portfolio")
+    validate.add_argument(
+        "--format", dest="input_format", default="auto", help="auto|csv|jsonl|parquet"
+    )
+    validate.add_argument("--output", default=None, help="HTML report output path")
+    validate.add_argument("--output-json", default=None, help="JSON report output path")
+    validate.add_argument("--verbose", action="store_true")
+    validate.add_argument("--min-score", type=float, default=None)
+
+    return parser
+
+
+def main(argv: list[str] | None = None) -> int:
+    parser = _build_parser()
+    args = parser.parse_args(argv)
+    if args.command is None:
+        parser.print_help()
+        return 2
     try:
-        schema_name = _resolve_schema_name(schema)
-        file_path = Path(path)
-        if not file_path.exists() or not file_path.is_file():
-            raise _CliRuntimeError(f"Input file not found: {file_path}")
-
-        records = _read_records(file_path, input_format)
-        engine = ValidationEngine()
-        overrides: dict[str, Any] | None = None
-        if min_score is not None:
-            overrides = {"min_score": min_score}
-        report = engine.validate(records, schema=schema_name, overrides=overrides)
-
-        stats = report.stats
-        status = "PASS" if report.passed else "FAIL"
-        typer.echo(f"finschema validate {file_path}")
-        typer.echo(
-            f"Schema: {schema_name} | Records: {stats['total_records']} | Score: {report.score:.4f} "
-            f"| {status}"
-        )
-        typer.echo(
-            f"Errors: {len(report.errors)} | Warnings: {len(report.warnings)} | "
-            f"Info: {len(report.info)}"
-        )
-
-        if verbose:
-            issues = report.errors + report.warnings + report.info
-            for issue in issues[:20]:
-                location = issue.field if issue.field is not None else "__root__"
-                index = issue.record_index if issue.record_index is not None else "-"
-                typer.echo(
-                    f"[{issue.severity.value}] row={index} field={location} "
-                    f"rule={issue.rule} msg={issue.message}"
-                )
-            if len(issues) > 20:
-                typer.echo(f"... truncated {len(issues) - 20} additional issues")
-
-        if output is not None:
-            report.to_html(output)
-            typer.echo(f"Saved HTML report to: {output}")
-        if output_json is not None:
-            report.to_json(output_json)
-            typer.echo(f"Saved JSON report to: {output_json}")
-
-        raise typer.Exit(code=0 if report.passed else 1)
-
-    except _CliUsageError as exc:
-        typer.echo(str(exc))
-        raise typer.Exit(code=2) from exc
-    except _CliRuntimeError as exc:
-        typer.echo(str(exc))
-        raise typer.Exit(code=3) from exc
-
-
-def main() -> None:
-    app()
+        if args.command == "check":
+            return _run_check(args)
+        if args.command == "validate":
+            return _run_validate(args)
+        raise CliUsageError("Unsupported command")
+    except CliUsageError as exc:
+        print(str(exc))
+        return 2
+    except CliRuntimeError as exc:
+        print(str(exc))
+        return 3
 
 
 if __name__ == "__main__":
-    main()
+    sys.exit(main())
