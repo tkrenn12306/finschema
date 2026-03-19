@@ -3,34 +3,26 @@
 [![CI](https://github.com/tkrenn12306/finschema/actions/workflows/ci.yml/badge.svg?branch=main)](https://github.com/tkrenn12306/finschema/actions/workflows/ci.yml)
 [![Python](https://img.shields.io/badge/python-3.10%2B-blue.svg)](https://www.python.org/)
 [![License](https://img.shields.io/badge/license-MIT-green.svg)](./pyproject.toml)
-[![Status](https://img.shields.io/badge/status-alpha-orange.svg)](#project-status)
+[![Status](https://img.shields.io/badge/status-beta-yellow.svg)](#project-status)
 
-Pydantic-compatible financial types and validation utilities.
-
-`finschema` brings domain-aware validation to financial data:
-- Identifier checks (`ISIN`, `CUSIP`, `SEDOL`, `LEI`, `IBAN`, `BIC`)
-- Currency-safe money operations (`Money`, `CurrencyCode`)
-- Business-day validation (`BusinessDate`)
-- CLI checks for fast validation from terminal
+Pydantic-compatible financial types, schemas, and quality validation.
 
 ## Project Status
 
-Current release line: **`v0.1.0 Alpha`**
+Current release line: **`v0.2.0 Beta`**
 
-Implemented now:
-- `finschema.types`: `ISIN`, `CUSIP`, `SEDOL`, `LEI`, `IBAN`, `BIC`, `CurrencyCode`, `Money`, `BusinessDate`
+Implemented in this version:
+- `finschema.types`: identifiers + `Money`, `Price`, `Quantity`, `Percentage`, `NAV`, `BusinessDate`
+- `finschema.schemas`: `Trade`, `Position`, `Portfolio`
+- `finschema.quality`: `ValidationEngine`, `QualityReport`, built-in price/FX/portfolio rules
 - `finschema check <type> <value>` CLI
-- Strict CI gates (`ruff`, `mypy`, `pytest`, coverage)
 
-Planned for next phases:
-- `v0.2.0`: `schemas/` + initial `quality/` engine
-- `v0.3.0+`: integrations (`pandas`, `polars`, `fastapi`), richer reporting
+Planned next:
+- `v0.3.0`: DataFrame integrations and richer reporting UX
 
 ## Installation
 
-`finschema` is currently in alpha and installed from source.
-
-### Option A: Editable install (recommended for contributors)
+`finschema` is currently installed from source.
 
 ```bash
 git clone git@github.com:tkrenn12306/finschema.git
@@ -40,95 +32,73 @@ source .venv/bin/activate
 pip install -e .[dev]
 ```
 
-### Option B: Runtime install only
-
-```bash
-git clone git@github.com:tkrenn12306/finschema.git
-cd finschema
-python3 -m venv .venv
-source .venv/bin/activate
-pip install -e .
-```
-
-Note: A public PyPI release is planned for a later stable milestone.
-
 ## Quickstart
 
-### 1) Validate a single identifier
+### 1) Financial types
 
 ```python
-from finschema.types import ISIN
+from finschema.types import ISIN, Money, BusinessDate
 
 ISIN("US0378331005")
+Money(1000, "EUR")
+BusinessDate("2026-03-19")
 ```
 
-Invalid value raises a structured error:
+### 2) Schemas
 
 ```python
-from finschema.types import ISIN
+from finschema.schemas import Trade
 
-ISIN("US0378331009")
-# finschema.errors.CheckDigitError:
-# Invalid ISIN check digit
-#   identifier: 'US0378331009'
-#   expected: 5
-#   actual: 9
-#   algorithm: 'Luhn (ISO 6166)'
+trade = Trade(
+    trade_id="T-20260319-001",
+    isin="US0378331005",
+    side="BUY",
+    quantity=100,
+    price=178.52,
+    currency="USD",
+    trade_date="2026-03-19",
+    settlement_date="2026-03-20",
+)
 ```
 
-### 2) Currency-safe money
+### 3) Quality engine
 
 ```python
-from finschema.types import Money
+from finschema.quality import ValidationEngine
 
-eur = Money(100, "EUR")
-usd = Money(50, "USD")
+engine = ValidationEngine()
+report = engine.validate(trade, schema="Trade")
 
-eur + usd  # raises CurrencyMismatchError
+print(report.score)
+print(report.passed)
+print(report.to_dict()["stats"])
 ```
 
-### 3) Business day checks
+### 4) Custom quality rule
 
 ```python
-from finschema.types import BusinessDate
+from finschema.quality import Severity, ValidationEngine, rule
 
-BusinessDate("2026-03-19")  # valid weekday
-BusinessDate("2026-03-21")  # raises NotBusinessDayError (Saturday)
+@rule(name="max_single_name", severity=Severity.WARNING)
+def max_single_name(portfolio):
+    findings = []
+    for position in portfolio.positions:
+        if position.weight and position.weight.as_decimal > 0.20:
+            findings.append(f"{position.isin} exceeds 20%")
+    return findings
+
+engine = ValidationEngine()
+engine.add_rule(max_single_name)
 ```
 
-### 4) CLI checks
+### 5) CLI
 
 ```bash
 finschema check isin US0378331005
 finschema check lei 529900T8BM49AURSDO55
-finschema check iban DE89370400440532013000
-```
-
-## Pydantic Integration
-
-All alpha types are Pydantic v2-compatible:
-
-```python
-from pydantic import BaseModel
-from finschema.types import ISIN, BusinessDate, Money
-
-class TradeIn(BaseModel):
-    isin: ISIN
-    trade_date: BusinessDate
-    notional: Money
 ```
 
 ## Development
-
-Setup:
-
-```bash
-python3 -m venv .venv
-source .venv/bin/activate
-pip install -e .[dev]
-```
-
-Quality gates:
 
 ```bash
 ruff check .
@@ -142,21 +112,14 @@ coverage report --include="finschema/types/*" --fail-under=95
 
 ```text
 finschema/
-  types/         # alpha implemented
-  reference/     # alpha implemented (offline datasets)
-  cli/           # alpha implemented
-  schemas/       # scaffold for v0.2.0+
-  quality/       # scaffold for v0.2.0+
-  integrations/  # scaffold for v0.3.0+
+  types/         # implemented
+  schemas/       # implemented (beta)
+  quality/       # implemented (beta)
+  reference/     # static offline datasets
+  cli/           # implemented
+  integrations/  # scaffold for next phases
 ```
-
-## Contributing
-
-Contributions are welcome. For alpha:
-- keep API changes explicit and documented
-- add tests for all behavior changes
-- keep `ruff`, `mypy`, and `pytest` green
 
 ## License
 
-MIT (see project metadata in `pyproject.toml`).
+MIT

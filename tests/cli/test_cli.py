@@ -28,4 +28,4 @@ def test_cli_unsupported_type() -> None:
 def test_cli_help() -> None:
     result = runner.invoke(app, ["--help"])
     assert result.exit_code == 0
-    assert "finschema alpha CLI" in result.stdout
+    assert "finschema beta CLI" in result.stdout

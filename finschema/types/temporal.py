@@ -11,8 +11,20 @@ from finschema.errors import InvalidFormatError, NotBusinessDayError
 class BusinessDate(date):
     """Date constrained to weekdays for alpha default behavior."""
 
-    def __new__(cls, value: str | date) -> BusinessDate:
-        if isinstance(value, date):
+    def __new__(
+        cls,
+        value: str | date | int,
+        month: int | None = None,
+        day: int | None = None,
+    ) -> BusinessDate:
+        if isinstance(value, int):
+            if month is None or day is None:
+                raise InvalidFormatError(
+                    "BusinessDate requires year, month, and day for integer constructor",
+                    details={"year": value, "month": month, "day": day},
+                )
+            parsed = date(value, month, day)
+        elif isinstance(value, date):
             parsed = value
         elif isinstance(value, str):
             try:

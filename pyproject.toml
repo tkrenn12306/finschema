@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "finschema"
-version = "0.1.0"
+version = "0.2.0"
 description = "Pydantic-compatible financial data types and validators"
 readme = "README.md"
 license = "MIT"
@@ -13,7 +13,7 @@ authors = [
   { name = "finschema maintainers" }
 ]
 classifiers = [
-  "Development Status :: 3 - Alpha",
+  "Development Status :: 4 - Beta",
   "Intended Audience :: Financial and Insurance Industry",
   "Intended Audience :: Developers",
   "License :: OSI Approved :: MIT License",
@@ -48,9 +48,9 @@ dev = [
 finschema = "finschema.cli.main:main"
 
 [project.urls]
-Homepage = "https://github.com/finschema/finschema"
-Repository = "https://github.com/finschema/finschema"
-Issues = "https://github.com/finschema/finschema/issues"
+Homepage = "https://github.com/tkrenn12306/finschema"
+Repository = "https://github.com/tkrenn12306/finschema"
+Issues = "https://github.com/tkrenn12306/finschema/issues"
 
 [tool.hatch.build.targets.wheel]
 packages = ["finschema"]

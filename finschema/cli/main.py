@@ -7,7 +7,7 @@ import typer
 from finschema.errors import ValidationError
 from finschema.types import BIC, CUSIP, IBAN, ISIN, LEI, SEDOL, BusinessDate, CurrencyCode
 
-app = typer.Typer(help="finschema alpha CLI")
+app = typer.Typer(help="finschema beta CLI")
 
 _CHECKERS: dict[str, Callable[[str], object]] = {
     "isin": ISIN,
@@ -23,7 +23,7 @@ _CHECKERS: dict[str, Callable[[str], object]] = {
 
 @app.callback()
 def main_callback() -> None:
-    """finschema alpha CLI."""
+    """finschema beta CLI."""
 
 
 @app.command("check")
