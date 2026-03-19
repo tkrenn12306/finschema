@@ -52,6 +52,9 @@ def test_report_to_html_returns_html_and_escapes_content() -> None:
     assert "<html" in html
     assert "finschema Quality Report" in html
     assert "&lt;script&gt;alert(1)&lt;/script&gt;" in html
+    assert 'id="severity-filter"' in html
+    assert "Export Invalid Rows CSV" in html
+    assert "Trend Placeholder" in html
 
 
 def test_report_to_html_writes_file(tmp_path: Path) -> None:
@@ -61,3 +64,20 @@ def test_report_to_html_writes_file(tmp_path: Path) -> None:
     disk = output.read_text(encoding="utf-8")
     assert html == disk
     assert "Summary By Rule" in disk
+
+
+def test_report_to_html_embeds_invalid_rows_for_csv_export() -> None:
+    report = _sample_report()
+    records = [
+        {"isin": "US0378331005", "price": "1"},
+        {"isin": "US0378331009", "price": "2"},
+        {"isin": "US5949181045", "price": "3"},
+    ]
+    html = report.to_html(records=records)
+    assert '"invalid_rows": [{"isin": "US0378331009", "price": "2"}]' in html
+
+
+def test_report_repr_html_delegates_to_html() -> None:
+    report = _sample_report()
+    html = report._repr_html_()
+    assert "<html" in html

@@ -11,3 +11,7 @@
 ## Schemas
 
 ::: finschema.schemas
+
+## Integrations
+
+::: finschema.integrations

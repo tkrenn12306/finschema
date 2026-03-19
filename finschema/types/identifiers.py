@@ -86,6 +86,11 @@ def compute_lei_check_digits(body: str) -> str:
 
 
 class ISIN(PydanticStrMixin, str):
+    JSON_SCHEMA_TITLE = "ISIN"
+    JSON_SCHEMA_PATTERN = r"^[A-Z]{2}[A-Z0-9]{9}[0-9]$"
+    JSON_SCHEMA_EXAMPLES = ("US0378331005",)
+    JSON_SCHEMA_DESCRIPTION = "ISO 6166 International Securities Identification Number."
+
     def __new__(cls, value: str) -> ISIN:
         normalized = value.upper().strip()
         if not _ISIN_RE.fullmatch(normalized):

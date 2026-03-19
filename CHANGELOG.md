@@ -7,6 +7,27 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.6.0] - 2026-03-19
+
+### Added
+
+- Integrations rollup across Pandas/Polars/FastAPI with API parity for `validate`, `is_valid`,
+  `clean`, `coerce`, and per-row validation helpers.
+- Polars `LazyFrame` validation namespace and expression validators (`expr.is_valid_isin`,
+  `expr.is_valid_currency`, `expr.is_valid_bic`).
+- FastAPI response quality headers (`X-Finschema-*`) and dependency helper
+  `depends_validate(...)`.
+- CLI `validate` support for JSON input, `--config`, and `--watch`; new `diff` command.
+- Interactive standalone HTML report UX (filter/sort, score gauge, invalid-row CSV export,
+  trend placeholder) and `QualityReport._repr_html_()` for notebooks.
+- MkDocs cookbook with end-to-end recipes and a `py.typed` marker for IDE/type-checker UX.
+
+### Changed
+
+- Version bumped to `0.6.0`.
+- Public integrations export surface extended with lazy `read_csv` and `polars_expr` helpers.
+- Type JSON schema metadata enriched for stronger FastAPI/OpenAPI docs.
+
 ## [0.4.0] - 2026-03-19
 
 ### Added

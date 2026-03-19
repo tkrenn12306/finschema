@@ -4,16 +4,17 @@ from __future__ import annotations
 
 import inspect
 import json
+import logging
 from collections.abc import Awaitable, Callable
 from typing import TYPE_CHECKING, Any, cast, get_args, get_origin
 
 from pydantic import BaseModel
 
 from finschema.quality import ValidationEngine
-from finschema.quality.report import ValidationIssue
+from finschema.quality.report import QualityReport, ValidationIssue
 
 try:
-    from fastapi import Request
+    from fastapi import Body, HTTPException, Request
     from starlette.middleware.base import BaseHTTPMiddleware
     from starlette.responses import JSONResponse, Response
     from starlette.routing import Match
@@ -29,16 +30,14 @@ if TYPE_CHECKING:
 else:
     _BaseHTTPMiddleware = BaseHTTPMiddleware
 
+_LOGGER = logging.getLogger("finschema.fastapi")
+_BODY_REQUIRED = Body(...)
+
 
 def _known_schema_name(model: type[BaseModel]) -> str | None:
-    from finschema.schemas import Portfolio, Position, Trade
+    from finschema import schemas as schemas_module
 
-    known: dict[type[BaseModel], str] = {
-        Trade: "Trade",
-        Position: "Position",
-        Portfolio: "Portfolio",
-    }
-    return known.get(model)
+    return model.__name__ if hasattr(schemas_module, model.__name__) else None
 
 
 def _resolve_model(annotation: Any) -> type[BaseModel] | None:
@@ -46,14 +45,12 @@ def _resolve_model(annotation: Any) -> type[BaseModel] | None:
         return None
 
     if isinstance(annotation, str):
-        from finschema.schemas import Portfolio, Position, Trade
+        from finschema import schemas as schemas_module
 
-        by_name: dict[str, type[BaseModel]] = {
-            "Trade": Trade,
-            "Position": Position,
-            "Portfolio": Portfolio,
-        }
-        return by_name.get(annotation)
+        candidate = getattr(schemas_module, annotation, None)
+        if isinstance(candidate, type) and issubclass(candidate, BaseModel):
+            return candidate
+        return None
 
     if isinstance(annotation, type) and issubclass(annotation, BaseModel):
         return annotation
@@ -127,7 +124,29 @@ def _issue_to_detail(issue: ValidationIssue) -> dict[str, Any]:
     }
 
 
+def _apply_report_headers(response: Response, report: QualityReport) -> Response:
+    response.headers["X-Finschema-Score"] = f"{report.score:.4f}"
+    response.headers["X-Finschema-Errors"] = str(len(report.errors))
+    response.headers["X-Finschema-Warnings"] = str(len(report.warnings))
+    return response
+
+
+def _log_report(request: Request, report: QualityReport) -> None:
+    _LOGGER.info(
+        "validated_request method=%s path=%s score=%.4f errors=%d warnings=%d info=%d passed=%s",
+        request.method,
+        request.url.path,
+        report.score,
+        len(report.errors),
+        len(report.warnings),
+        len(report.info),
+        report.passed,
+    )
+
+
 class FinschemaMiddleware(_BaseHTTPMiddleware):
+    """Middleware that auto-validates request JSON payloads for known finschema schemas."""
+
     def __init__(
         self,
         app: Any,
@@ -149,30 +168,25 @@ class FinschemaMiddleware(_BaseHTTPMiddleware):
         call_next: Callable[[Request], Awaitable[Response]],
     ) -> Response:
         if request.method.upper() not in {"POST", "PUT", "PATCH"}:
-            response = await call_next(request)
-            return response
+            return await call_next(request)
 
         content_type = request.headers.get("content-type", "").lower()
         if "application/json" not in content_type:
-            response = await call_next(request)
-            return response
+            return await call_next(request)
 
         schema = _detect_schema_from_request(request)
         if schema is None:
-            response = await call_next(request)
-            return response
+            return await call_next(request)
 
         raw_body = await request.body()
         if not raw_body:
-            response = await call_next(request)
-            return response
+            return await call_next(request)
 
         try:
             payload = json.loads(raw_body)
         except json.JSONDecodeError:
             request_with_body = self._request_with_restored_body(request, raw_body)
-            response = await call_next(request_with_body)
-            return response
+            return await call_next(request_with_body)
 
         report = self._engine.validate(
             payload,
@@ -181,15 +195,17 @@ class FinschemaMiddleware(_BaseHTTPMiddleware):
             overrides=self._overrides,
         )
         request.state.finschema_report = report
+        _log_report(request, report)
 
         if self._strict and report.errors:
             detail = [_issue_to_detail(issue) for issue in report.errors]
-            return JSONResponse(status_code=422, content={"detail": detail})
+            error_response = JSONResponse(status_code=422, content={"detail": detail})
+            return _apply_report_headers(error_response, report)
 
         request_with_body = self._request_with_restored_body(request, raw_body)
         request_with_body.state.finschema_report = report
         response = await call_next(request_with_body)
-        return response
+        return _apply_report_headers(response, report)
 
     @staticmethod
     def _request_with_restored_body(request: Request, raw_body: bytes) -> Request:
@@ -205,4 +221,38 @@ class FinschemaMiddleware(_BaseHTTPMiddleware):
         return Request(request.scope, _receive)
 
 
-__all__ = ["FinschemaMiddleware"]
+def depends_validate(
+    schema: type[BaseModel] | str,
+    *,
+    engine: ValidationEngine | None = None,
+    context: dict[str, Any] | None = None,
+    overrides: dict[str, Any] | None = None,
+    strict: bool = True,
+) -> Callable[..., Any]:
+    """Create a FastAPI dependency that validates request payloads via ValidationEngine."""
+
+    runtime_engine = engine or ValidationEngine()
+    runtime_context = context or {}
+    runtime_overrides = overrides or {}
+
+    async def _dependency(request: Request, payload: Any = _BODY_REQUIRED) -> Any:
+        report = runtime_engine.validate(
+            payload,
+            schema=schema,
+            context=runtime_context,
+            overrides=runtime_overrides,
+        )
+        request.state.finschema_report = report
+
+        if strict and report.errors:
+            raise HTTPException(
+                status_code=422,
+                detail=[_issue_to_detail(issue) for issue in report.errors],
+            )
+
+        return payload
+
+    return _dependency
+
+
+__all__ = ["FinschemaMiddleware", "depends_validate"]

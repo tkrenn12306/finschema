@@ -143,6 +143,20 @@ class Money:
             ),
         )
 
+    @classmethod
+    def __get_pydantic_json_schema__(cls, _core_schema: Any, _handler: Any) -> dict[str, Any]:
+        return {
+            "type": "object",
+            "title": "Money",
+            "description": "Amount and ISO 4217 currency.",
+            "required": ["amount", "currency"],
+            "properties": {
+                "amount": {"type": "string", "examples": ["1000.50"]},
+                "currency": {"type": "string", "pattern": r"^[A-Z]{3}$", "examples": ["EUR"]},
+            },
+            "examples": [{"amount": "1000.50", "currency": "EUR"}],
+        }
+
 
 @dataclass(frozen=True, slots=True)
 class Price:

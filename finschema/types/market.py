@@ -8,6 +8,11 @@ from ._pydantic import PydanticStrMixin
 
 
 class CurrencyCode(PydanticStrMixin, str):
+    JSON_SCHEMA_TITLE = "CurrencyCode"
+    JSON_SCHEMA_PATTERN = r"^[A-Z]{3}$"
+    JSON_SCHEMA_EXAMPLES = ("EUR", "USD", "JPY")
+    JSON_SCHEMA_DESCRIPTION = "ISO 4217 currency code."
+
     def __new__(cls, value: str, *, include_historical: bool = False) -> CurrencyCode:
         normalized = value.upper().strip()
         info = get_currency_info(normalized, include_historical=include_historical)
@@ -35,6 +40,10 @@ class CurrencyCode(PydanticStrMixin, str):
 
 
 class CountryCode(PydanticStrMixin, str):
+    JSON_SCHEMA_TITLE = "CountryCode"
+    JSON_SCHEMA_EXAMPLES = ("DE", "DEU", "276")
+    JSON_SCHEMA_DESCRIPTION = "ISO 3166 country code (alpha-2/alpha-3/numeric)."
+
     def __new__(cls, value: str) -> CountryCode:
         info = get_country_info(value)
         return str.__new__(cls, info.alpha2)

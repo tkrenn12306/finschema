@@ -6,6 +6,8 @@ theme:
 nav:
   - Home: docs/index.md
   - Getting Started: docs/getting-started.md
+  - Cookbook: docs/cookbook.md
+  - Benchmarks: docs/benchmarks.md
   - API: docs/api.md
 plugins:
   - search

@@ -68,6 +68,11 @@ def compute_iban_check_digits(country: str, bban: str) -> str:
 
 
 class IBAN(PydanticStrMixin, str):
+    JSON_SCHEMA_TITLE = "IBAN"
+    JSON_SCHEMA_PATTERN = r"^[A-Z]{2}[0-9]{2}[A-Z0-9]{10,30}$"
+    JSON_SCHEMA_EXAMPLES = ("DE89370400440532013000",)
+    JSON_SCHEMA_DESCRIPTION = "ISO 13616 International Bank Account Number."
+
     def __new__(cls, value: str) -> IBAN:
         normalized = value.replace(" ", "").upper().strip()
         if not _IBAN_RE.fullmatch(normalized):
@@ -135,6 +140,11 @@ class IBAN(PydanticStrMixin, str):
 
 
 class BIC(PydanticStrMixin, str):
+    JSON_SCHEMA_TITLE = "BIC"
+    JSON_SCHEMA_PATTERN = r"^[A-Z]{4}[A-Z]{2}[A-Z0-9]{2}([A-Z0-9]{3})?$"
+    JSON_SCHEMA_EXAMPLES = ("DEUTDEFF", "BOFAUS3NXXX")
+    JSON_SCHEMA_DESCRIPTION = "ISO 9362 Business Identifier Code (SWIFT)."
+
     def __new__(cls, value: str) -> BIC:
         normalized = value.upper().strip()
         if not _BIC_RE.fullmatch(normalized):

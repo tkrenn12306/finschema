@@ -13,6 +13,10 @@ from ._pydantic import PydanticStrMixin
 class BusinessDate(date):
     """Date constrained to weekdays for default US business-day behavior."""
 
+    JSON_SCHEMA_TITLE = "BusinessDate"
+    JSON_SCHEMA_FORMAT = "date"
+    JSON_SCHEMA_EXAMPLES = ("2026-03-19",)
+
     def __new__(
         cls,
         value: str | date | int,
@@ -89,6 +93,16 @@ class BusinessDate(date):
             )
 
         return core_schema.no_info_plain_validator_function(_validate)
+
+    @classmethod
+    def __get_pydantic_json_schema__(cls, _core_schema: Any, _handler: Any) -> dict[str, Any]:
+        return {
+            "type": "string",
+            "title": cls.JSON_SCHEMA_TITLE,
+            "format": cls.JSON_SCHEMA_FORMAT,
+            "examples": list(cls.JSON_SCHEMA_EXAMPLES),
+            "description": "Weekday-only date (Mon-Fri).",
+        }
 
 
 _TENOR_DAYS: dict[str, int] = {

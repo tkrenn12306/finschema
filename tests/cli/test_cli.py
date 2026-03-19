@@ -209,3 +209,92 @@ def test_cli_validate_auto_format_detection_error(tmp_path: Path) -> None:
     code, out = _run_cli(["validate", str(input_file), "--schema", "Trade"])
     assert code == 2
     assert "Could not detect format" in out
+
+
+def test_cli_validate_json_pass(tmp_path: Path) -> None:
+    input_file = tmp_path / "trade.json"
+    input_file.write_text(
+        json.dumps(
+            {
+                "trade_id": "T-1",
+                "isin": "US0378331005",
+                "side": "BUY",
+                "quantity": 100,
+                "price": 178.52,
+                "currency": "USD",
+                "trade_date": "2026-03-19",
+                "settlement_date": "2026-03-20",
+            }
+        ),
+        encoding="utf-8",
+    )
+
+    code, out = _run_cli(["validate", str(input_file), "--schema", "Trade"])
+    assert code == 0
+    assert "PASS" in out
+
+
+def test_cli_validate_watch_mode_single_cycle(tmp_path: Path) -> None:
+    input_file = tmp_path / "trades.csv"
+    _write_trade_csv(input_file, invalid_isin=False)
+    code, out = _run_cli(
+        [
+            "validate",
+            str(input_file),
+            "--schema",
+            "Trade",
+            "--watch",
+            "--watch-cycles",
+            "1",
+            "--watch-interval",
+            "0.1",
+        ]
+    )
+    assert code == 0
+    assert "Watch mode started" in out
+
+
+def test_cli_validate_config_applies_strict_mode(tmp_path: Path) -> None:
+    input_file = tmp_path / "trades.csv"
+    config_file = tmp_path / "finschema.toml"
+    _write_trade_csv(input_file, invalid_isin=True)
+    config_file.write_text("strict_mode = true\nmin_score = 0.0\n", encoding="utf-8")
+
+    code, out = _run_cli(
+        [
+            "validate",
+            str(input_file),
+            "--schema",
+            "Trade",
+            "--config",
+            str(config_file),
+        ]
+    )
+    assert code == 3
+    assert "Validation failed in strict mode" in out
+
+
+def test_cli_diff_command_and_output_json(tmp_path: Path) -> None:
+    file_a = tmp_path / "a.csv"
+    file_b = tmp_path / "b.csv"
+    diff_json = tmp_path / "diff.json"
+    _write_trade_csv(file_a, invalid_isin=False)
+    _write_trade_csv(file_b, invalid_isin=True)
+
+    code, out = _run_cli(
+        [
+            "diff",
+            str(file_a),
+            str(file_b),
+            "--schema",
+            "Trade",
+            "--output-json",
+            str(diff_json),
+        ]
+    )
+    assert code == 1
+    assert "finschema diff" in out
+    assert diff_json.exists()
+    payload = json.loads(diff_json.read_text(encoding="utf-8"))
+    assert payload["schema"] == "Trade"
+    assert payload["errors_a"] <= payload["errors_b"]
