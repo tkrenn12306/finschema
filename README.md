@@ -3,26 +3,22 @@
 [![CI](https://github.com/tkrenn12306/finschema/actions/workflows/ci.yml/badge.svg?branch=main)](https://github.com/tkrenn12306/finschema/actions/workflows/ci.yml)
 [![Python](https://img.shields.io/badge/python-3.10%2B-blue.svg)](https://www.python.org/)
 [![License](https://img.shields.io/badge/license-MIT-green.svg)](./pyproject.toml)
-[![Status](https://img.shields.io/badge/status-beta-yellow.svg)](#project-status)
+[![Status](https://img.shields.io/badge/status-v0.3.0%20integrations-brightgreen.svg)](#project-status)
 
-Pydantic-compatible financial types, schemas, and quality validation.
+Pydantic-compatible financial types, schemas, quality rules, and ecosystem integrations.
 
 ## Project Status
 
-Current release line: **`v0.2.0 Beta`**
+Current release line: **`v0.3.0 Integrations`**
 
 Implemented in this version:
-- `finschema.types`: identifiers + `Money`, `Price`, `Quantity`, `Percentage`, `NAV`, `BusinessDate`
+- `finschema.types`: financial identifiers, monetary and temporal primitives
 - `finschema.schemas`: `Trade`, `Position`, `Portfolio`
-- `finschema.quality`: `ValidationEngine`, `QualityReport`, built-in price/FX/portfolio rules
-- `finschema check <type> <value>` CLI
-
-Planned next:
-- `v0.3.0`: DataFrame integrations and richer reporting UX
+- `finschema.quality`: `ValidationEngine`, `QualityReport`, custom rule decorator
+- `finschema.integrations`: Pandas accessor, Polars namespace, FastAPI middleware
+- `finschema` CLI: `check` and `validate` commands
 
 ## Installation
-
-`finschema` is currently installed from source.
 
 ```bash
 git clone git@github.com:tkrenn12306/finschema.git
@@ -32,19 +28,17 @@ source .venv/bin/activate
 pip install -e .[dev]
 ```
 
-## Quickstart
+Optional extras:
 
-### 1) Financial types
-
-```python
-from finschema.types import ISIN, Money, BusinessDate
-
-ISIN("US0378331005")
-Money(1000, "EUR")
-BusinessDate("2026-03-19")
+```bash
+pip install -e .[pandas]
+pip install -e .[polars]
+pip install -e .[fastapi]
 ```
 
-### 2) Schemas
+## Quickstart
+
+### 1) Type and schema validation
 
 ```python
 from finschema.schemas import Trade
@@ -61,7 +55,7 @@ trade = Trade(
 )
 ```
 
-### 3) Quality engine
+### 2) Quality engine and reports
 
 ```python
 from finschema.quality import ValidationEngine
@@ -69,33 +63,55 @@ from finschema.quality import ValidationEngine
 engine = ValidationEngine()
 report = engine.validate(trade, schema="Trade")
 
-print(report.score)
-print(report.passed)
-print(report.to_dict()["stats"])
+report.to_dict()
+report.to_json("report.json")
+report.to_html("report.html")
 ```
 
-### 4) Custom quality rule
+### 3) Pandas integration
 
 ```python
-from finschema.quality import Severity, ValidationEngine, rule
+import pandas as pd
+import finschema.integrations.pandas  # registers .finschema accessor
 
-@rule(name="max_single_name", severity=Severity.WARNING)
-def max_single_name(portfolio):
-    findings = []
-    for position in portfolio.positions:
-        if position.weight and position.weight.as_decimal > 0.20:
-            findings.append(f"{position.isin} exceeds 20%")
-    return findings
+df = pd.DataFrame([{
+    "trade_id": "T-1",
+    "isin": "US0378331005",
+    "side": "BUY",
+    "quantity": 10,
+    "price": 100,
+    "currency": "USD",
+    "trade_date": "2026-03-19",
+    "settlement_date": "2026-03-20",
+}])
 
-engine = ValidationEngine()
-engine.add_rule(max_single_name)
+report = df.finschema.validate("Trade")
+mask = df.finschema.is_valid("Trade")
+clean_df = df[mask]
+```
+
+### 4) FastAPI middleware
+
+```python
+from fastapi import FastAPI
+from finschema.integrations.fastapi import FinschemaMiddleware
+from finschema.schemas import Trade
+
+app = FastAPI()
+app.add_middleware(FinschemaMiddleware, strict=True)
+
+@app.post("/trades")
+async def create_trade(trade: Trade) -> dict[str, str]:
+    return {"trade_id": trade.trade_id, "status": "accepted"}
 ```
 
 ### 5) CLI
 
 ```bash
 finschema check isin US0378331005
-finschema check lei 529900T8BM49AURSDO55
+finschema validate trades.csv --schema Trade --output report.html --output-json report.json
+finschema validate positions.parquet --schema Position --format parquet
+finschema validate trades.jsonl --schema Trade --verbose
 ```
 
 ## Development
@@ -106,18 +122,6 @@ ruff format --check .
 mypy
 pytest
 coverage report --include="finschema/types/*" --fail-under=95
-```
-
-## Repository Layout
-
-```text
-finschema/
-  types/         # implemented
-  schemas/       # implemented (beta)
-  quality/       # implemented (beta)
-  reference/     # static offline datasets
-  cli/           # implemented
-  integrations/  # scaffold for next phases
 ```
 
 ## License
