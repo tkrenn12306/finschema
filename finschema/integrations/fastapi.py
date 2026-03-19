@@ -5,7 +5,7 @@ from __future__ import annotations
 import inspect
 import json
 from collections.abc import Awaitable, Callable
-from typing import Any, cast, get_args, get_origin
+from typing import TYPE_CHECKING, Any, cast, get_args, get_origin
 
 from pydantic import BaseModel
 
@@ -21,6 +21,12 @@ except Exception as exc:  # pragma: no cover - depends on optional dependency
     raise RuntimeError(
         "fastapi is not installed. Install extras with: pip install finschema[fastapi]"
     ) from exc
+
+if TYPE_CHECKING:
+    class _BaseHTTPMiddleware:
+        def __init__(self, app: Any) -> None: ...
+else:
+    _BaseHTTPMiddleware = BaseHTTPMiddleware
 
 
 def _known_schema_name(model: type[BaseModel]) -> str | None:
@@ -120,7 +126,7 @@ def _issue_to_detail(issue: ValidationIssue) -> dict[str, Any]:
     }
 
 
-class FinschemaMiddleware(BaseHTTPMiddleware):
+class FinschemaMiddleware(_BaseHTTPMiddleware):
     def __init__(
         self,
         app: Any,

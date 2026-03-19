@@ -74,6 +74,10 @@ warn_unreachable = true
 show_error_codes = true
 packages = ["finschema"]
 
+[[tool.mypy.overrides]]
+module = ["fastapi", "starlette", "starlette.*", "polars"]
+ignore_missing_imports = true
+
 [tool.pytest.ini_options]
 addopts = "-q --cov=finschema --cov-report=term-missing --cov-report=xml"
 testpaths = ["tests"]

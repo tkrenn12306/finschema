@@ -124,7 +124,8 @@ def _read_parquet(path: Path) -> list[dict[str, Any]]:
         import polars as pl
 
         frame = pl.read_parquet(path)
-        return frame.to_dicts()
+        records: list[dict[str, Any]] = frame.to_dicts()
+        return records
     except Exception as exc:
         raise CliRuntimeError(
             "Parquet reading requires pandas or polars. Install extras with: "
