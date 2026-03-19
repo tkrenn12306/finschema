@@ -80,12 +80,12 @@ def validate_engine_config(raw: dict[str, Any]) -> dict[str, Any]:
 
 
 def _load_toml(path: Path) -> dict[str, Any]:
-    data: dict[str, Any]
+    parsed_any: Any
     if sys.version_info >= (3, 11):
         import tomllib
 
         with path.open("rb") as handle:
-            parsed = tomllib.load(handle)
+            parsed_any = tomllib.load(handle)
     else:
         try:
             import tomli
@@ -94,12 +94,11 @@ def _load_toml(path: Path) -> dict[str, Any]:
                 "TOML config on Python <3.11 requires tomli. Install with: pip install tomli"
             ) from exc
         with path.open("rb") as handle:
-            parsed = tomli.load(handle)
+            parsed_any = tomli.load(handle)
 
-    if not isinstance(parsed, dict):
+    if not isinstance(parsed_any, dict):
         return {}
-    data = parsed
-    return data
+    return parsed_any
 
 
 def _load_yaml(path: Path) -> dict[str, Any]:
