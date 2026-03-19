@@ -36,6 +36,9 @@ def test_business_date_invalid_type() -> None:
     with pytest.raises(InvalidFormatError):
         BusinessDate(123)  # type: ignore[arg-type]
 
+    with pytest.raises(InvalidFormatError):
+        BusinessDate(object())  # type: ignore[arg-type]
+
 
 def test_business_date_type_adapter_paths() -> None:
     adapter = TypeAdapter(BusinessDate)

@@ -1,12 +1,18 @@
 from __future__ import annotations
 
 from datetime import date, timedelta
+from decimal import Decimal
 
 import pytest
 from pydantic import TypeAdapter
 from pydantic import ValidationError as PydanticValidationError
 
-from finschema.errors import CurrencyMismatchError, InvalidFormatError, OutOfRangeError
+from finschema.errors import (
+    CurrencyMismatchError,
+    InvalidFormatError,
+    OutOfRangeError,
+    PrecisionError,
+)
 from finschema.types import NAV, BasisPoints, MaturityDate, Money, Percentage, Price, Quantity, Rate
 
 
@@ -69,3 +75,26 @@ def test_maturity_date_must_be_future() -> None:
 def test_basis_points_from_percentage_invalid() -> None:
     with pytest.raises(InvalidFormatError):
         BasisPoints.from_percentage("bad")
+
+
+def test_quantity_precision_error() -> None:
+    with pytest.raises(PrecisionError):
+        Quantity("1.234", max_decimals=2)
+
+
+def test_percentage_additional_error_branches() -> None:
+    with pytest.raises(InvalidFormatError):
+        Percentage("1", convention="unknown")
+    with pytest.raises(OutOfRangeError):
+        Percentage("101", convention="percent")
+    with pytest.raises(OutOfRangeError):
+        Percentage("101", convention="auto")
+
+
+def test_basis_points_conversion_paths() -> None:
+    bps = BasisPoints("100")
+    as_percentage = bps.to_percentage()
+    assert as_percentage.as_decimal == Decimal("0.01")
+    assert as_percentage.as_percent == Decimal("1")
+    assert BasisPoints.from_percentage(Percentage("1", convention="percent")).as_decimal == 100
+    assert TypeAdapter(BasisPoints).validate_python("25").as_decimal == 25

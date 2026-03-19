@@ -92,9 +92,19 @@ def test_isin_invalid_country() -> None:
         ISIN("ZZ0378331005")
 
 
+def test_isin_invalid_format() -> None:
+    with pytest.raises(InvalidFormatError):
+        ISIN("US037833100")
+
+
 @pytest.mark.parametrize("value", _make_cusips())
 def test_cusip_valid_cases(value: str) -> None:
     assert CUSIP(value) == value
+
+
+def test_cusip_invalid_format() -> None:
+    with pytest.raises(InvalidFormatError):
+        CUSIP("12 45678")
 
 
 @pytest.mark.parametrize("value", _make_cusips())
@@ -109,6 +119,11 @@ def test_sedol_valid_cases(value: str) -> None:
     assert SEDOL(value) == value
 
 
+def test_sedol_invalid_format() -> None:
+    with pytest.raises(InvalidFormatError):
+        SEDOL("ABCD*12")
+
+
 @pytest.mark.parametrize("value", _make_sedols())
 def test_sedol_invalid_cases(value: str) -> None:
     bad = value[:-1] + str((int(value[-1]) + 1) % 10)
@@ -121,11 +136,31 @@ def test_lei_valid_cases(value: str) -> None:
     assert LEI(value) == value
 
 
+def test_lei_invalid_format() -> None:
+    with pytest.raises(InvalidFormatError):
+        LEI("ABC")
+
+
 @pytest.mark.parametrize("value", _make_leis())
 def test_lei_invalid_cases(value: str) -> None:
     bad = value[:-1] + str((int(value[-1]) + 1) % 10)
     with pytest.raises(CheckDigitError):
         LEI(bad)
+
+
+def test_lei_body_length_validation() -> None:
+    with pytest.raises(InvalidFormatError):
+        compute_lei_check_digits("SHORT")
+
+
+def test_cusip_symbol_char_mapping() -> None:
+    digit = compute_cusip_check_digit("*1234567")
+    assert 0 <= digit <= 9
+
+
+def test_cusip_letter_char_mapping() -> None:
+    digit = compute_cusip_check_digit("AB123456")
+    assert 0 <= digit <= 9
 
 
 @pytest.mark.parametrize("value", _make_ibans())
@@ -145,9 +180,51 @@ def test_iban_us_not_supported() -> None:
         IBAN("US64370400440532013000")
 
 
+def test_iban_invalid_format() -> None:
+    with pytest.raises(InvalidFormatError):
+        IBAN("DE00")
+
+
+def test_iban_unknown_country_code() -> None:
+    with pytest.raises(InvalidCountryError):
+        IBAN("ZZ89370400440532013000")
+
+
+def test_iban_invalid_length() -> None:
+    with pytest.raises(InvalidFormatError):
+        IBAN("DE8937040044053201300")
+
+
+def test_iban_invalid_bban_pattern() -> None:
+    with pytest.raises(InvalidFormatError):
+        IBAN("NL91ABNA12345A7890")
+
+
+def test_iban_checksum_safety_branch(monkeypatch: pytest.MonkeyPatch) -> None:
+    from finschema.types import banking as banking_mod
+
+    original = banking_mod._mod97
+    calls = {"count": 0}
+
+    def _patched(value: str) -> int:
+        calls["count"] += 1
+        if calls["count"] == 1:
+            return original(value)
+        return 0
+
+    monkeypatch.setattr(banking_mod, "_mod97", _patched)
+    with pytest.raises(CheckDigitError):
+        IBAN("DE89370400440532013000")
+
+
 @pytest.mark.parametrize("value", _make_bics())
 def test_bic_valid_cases(value: str) -> None:
     assert BIC(value) == value
+
+
+def test_bic_invalid_format() -> None:
+    with pytest.raises(InvalidFormatError):
+        BIC("ABC12")
 
 
 @pytest.mark.parametrize("value", _make_bics())

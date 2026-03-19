@@ -59,4 +59,4 @@ jobs:
           pip install -e .[dev,pandas,polars,fastapi]
 
       - name: Integration tests
-        run: pytest tests/integrations
+        run: pytest -o addopts='' tests/integrations
