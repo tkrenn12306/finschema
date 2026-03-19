@@ -81,12 +81,17 @@ ignore_missing_imports = true
 [tool.pytest.ini_options]
 addopts = "-q --cov=finschema --cov-report=term-missing --cov-report=xml"
 testpaths = ["tests"]
+markers = [
+  "anyio: async integration tests using anyio-compatible runtime",
+]
 
 [tool.coverage.run]
 branch = true
 source = ["finschema"]
+omit = ["finschema/integrations/*"]
 
 [tool.coverage.report]
 fail_under = 90
 show_missing = true
 skip_covered = false
+omit = ["finschema/integrations/*"]
