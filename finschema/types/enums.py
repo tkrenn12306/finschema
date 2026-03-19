@@ -61,3 +61,12 @@ class CorporateActionType(str, Enum):
     SPINOFF = "SPINOFF"
     RIGHTS_ISSUE = "RIGHTS_ISSUE"
     TENDER_OFFER = "TENDER_OFFER"
+
+
+class CashFlowType(str, Enum):
+    SUBSCRIPTION = "SUBSCRIPTION"
+    REDEMPTION = "REDEMPTION"
+    DIVIDEND = "DIVIDEND"
+    FEE = "FEE"
+    INTEREST = "INTEREST"
+    OTHER = "OTHER"

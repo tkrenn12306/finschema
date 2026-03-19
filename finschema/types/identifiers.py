@@ -24,6 +24,7 @@ _FIGI_RE = re.compile(r"^BBG[A-Z0-9]{9}$")
 _VALOR_RE = re.compile(r"^[0-9]{6,9}$")
 _WKN_RE = re.compile(r"^[A-Z0-9]{6}$")
 _RIC_RE = re.compile(r"^[A-Z0-9._-]{1,24}(\.[A-Z0-9]{1,4})?$")
+_MIC_RE = re.compile(r"^[A-Z0-9]{4}$")
 
 
 def _expand_alpha_numeric(value: str) -> str:
@@ -253,5 +254,16 @@ class Ticker(PydanticStrMixin, str):
             raise InvalidFormatError(
                 f"{normalized!r} contains invalid ticker characters",
                 details={"expected_pattern": active_pattern.pattern},
+            )
+        return str.__new__(cls, normalized)
+
+
+class MIC(PydanticStrMixin, str):
+    def __new__(cls, value: str) -> MIC:
+        normalized = value.upper().strip()
+        if not _MIC_RE.fullmatch(normalized):
+            raise InvalidFormatError(
+                f"{normalized!r} is not a valid MIC",
+                details={"expected": "4 uppercase alphanumeric characters"},
             )
         return str.__new__(cls, normalized)

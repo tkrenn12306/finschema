@@ -3,13 +3,14 @@
 from .banking import BIC, IBAN
 from .enums import (
     AssetClass,
+    CashFlowType,
     CorporateActionType,
     OrderType,
     SettlementType,
     Side,
     TimeInForce,
 )
-from .identifiers import CUSIP, FIGI, ISIN, LEI, RIC, SEDOL, VALOR, WKN, Ticker
+from .identifiers import CUSIP, FIGI, ISIN, LEI, MIC, RIC, SEDOL, VALOR, WKN, Ticker
 from .market import CountryCode, CurrencyCode
 from .monetary import NAV, BasisPoints, Money, Percentage, Price, Quantity, Rate
 from .temporal import BusinessDate, MaturityDate, Tenor
@@ -19,6 +20,7 @@ __all__ = [
     "BIC",
     "BasisPoints",
     "BusinessDate",
+    "CashFlowType",
     "CUSIP",
     "CountryCode",
     "CorporateActionType",
@@ -27,6 +29,7 @@ __all__ = [
     "IBAN",
     "ISIN",
     "LEI",
+    "MIC",
     "MaturityDate",
     "Money",
     "NAV",

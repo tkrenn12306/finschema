@@ -19,6 +19,13 @@ class Severity(str, Enum):
     INFO = "INFO"
 
 
+_SEVERITY_RANK: dict[Severity, int] = {
+    Severity.INFO: 1,
+    Severity.WARNING: 2,
+    Severity.ERROR: 3,
+}
+
+
 @dataclass(frozen=True, slots=True)
 class ValidationIssue:
     rule: str
@@ -30,10 +37,23 @@ class ValidationIssue:
 
 
 class QualityReport:
-    def __init__(self, issues: list[ValidationIssue], total_records: int, min_score: float = 0.95):
+    def __init__(
+        self,
+        issues: list[ValidationIssue],
+        total_records: int,
+        min_score: float = 0.95,
+        total_checks: int | None = None,
+        fail_on_severity: Severity | str = Severity.ERROR,
+    ):
         self._issues = list(issues)
         self._total_records = max(0, total_records)
         self._min_score = min_score
+        self._total_checks = max(total_checks or self._total_records or 1, 1)
+        self._fail_on_severity = (
+            fail_on_severity
+            if isinstance(fail_on_severity, Severity)
+            else Severity(str(fail_on_severity).upper())
+        )
 
     @property
     def issues(self) -> list[ValidationIssue]:
@@ -66,14 +86,23 @@ class QualityReport:
         return dict(grouped)
 
     @property
+    def weighted_errors(self) -> float:
+        return (
+            float(len(self.errors)) + float(len(self.warnings)) * 0.5 + float(len(self.info)) * 0.1
+        )
+
+    @property
     def score(self) -> float:
-        denominator = max(self._total_records, 1)
-        penalties = len(self.errors) * 1.0 + len(self.warnings) * 0.25 + len(self.info) * 0.05
-        return max(0.0, 1.0 - penalties / float(denominator))
+        return max(0.0, 1.0 - (self.weighted_errors / float(self._total_checks)))
+
+    def _is_failure_issue(self, issue: ValidationIssue) -> bool:
+        return _SEVERITY_RANK[issue.severity] >= _SEVERITY_RANK[self._fail_on_severity]
 
     @property
     def passed(self) -> bool:
-        return len(self.errors) == 0 and self.score >= self._min_score
+        if self.score < self._min_score:
+            return False
+        return not any(self._is_failure_issue(issue) for issue in self._issues)
 
     @property
     def stats(self) -> dict[str, float | int]:
@@ -82,27 +111,31 @@ class QualityReport:
         error_rate = float(invalid) / float(self._total_records) if self._total_records else 0.0
         return {
             "total_records": self._total_records,
+            "valid_count": valid,
+            "invalid_count": invalid,
+            "error_rate": error_rate,
+            # Backward compatibility aliases
             "valid": valid,
             "invalid": invalid,
-            "error_rate": error_rate,
         }
 
     def _compute_invalid_record_count(self) -> int:
         if self._total_records == 0:
             return 0
 
-        indexed_errors = {
-            issue.record_index for issue in self.errors if issue.record_index is not None
+        failing_issues = [issue for issue in self._issues if self._is_failure_issue(issue)]
+        indexed_failures = {
+            issue.record_index for issue in failing_issues if issue.record_index is not None
         }
-        has_global_error = any(issue.record_index is None for issue in self.errors)
+        has_global_failure = any(issue.record_index is None for issue in failing_issues)
 
-        if self._total_records == 1 and (indexed_errors or has_global_error):
+        if self._total_records == 1 and (indexed_failures or has_global_failure):
             return 1
 
-        if indexed_errors:
-            return len(indexed_errors)
+        if indexed_failures:
+            return len(indexed_failures)
 
-        if has_global_error:
+        if has_global_failure:
             return self._total_records
 
         return 0
@@ -112,6 +145,8 @@ class QualityReport:
             "score": self.score,
             "passed": self.passed,
             "stats": self.stats,
+            "total_checks": self._total_checks,
+            "weighted_errors": self.weighted_errors,
             "errors": [self._issue_to_dict(issue) for issue in self.errors],
             "warnings": [self._issue_to_dict(issue) for issue in self.warnings],
             "info": [self._issue_to_dict(issue) for issue in self.info],
@@ -266,7 +301,7 @@ class QualityReport:
       <h1>finschema Quality Report</h1>
       <p class="muted">Standalone report generated from QualityReport.</p>
       <p><strong>Score:</strong> {score:.4f} | <strong>Status:</strong> <span class="status">{"PASS" if passed else "FAIL"}</span></p>
-      <p><strong>Total:</strong> {stats["total_records"]} | <strong>Valid:</strong> {stats["valid"]} | <strong>Invalid:</strong> {stats["invalid"]} | <strong>Error rate:</strong> {stats["error_rate"]:.4f}</p>
+      <p><strong>Total:</strong> {stats["total_records"]} | <strong>Valid:</strong> {stats["valid_count"]} | <strong>Invalid:</strong> {stats["invalid_count"]} | <strong>Error rate:</strong> {stats["error_rate"]:.4f}</p>
     </section>
 
     <section class="card">

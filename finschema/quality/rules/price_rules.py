@@ -86,4 +86,27 @@ def validate_price(
                     )
                 )
 
+    stale_threshold = int(config.get("stale_price_days", 3))
+    stale_by_isin = context.get("stale_price_days_by_isin", {})
+    stale_days_raw = None
+    if key and isinstance(stale_by_isin, dict):
+        stale_days_raw = stale_by_isin.get(key)
+    if stale_days_raw is None and isinstance(context.get("stale_price_days"), int):
+        stale_days_raw = context.get("stale_price_days")
+    if stale_days_raw is not None:
+        stale_days = int(stale_days_raw)
+        if stale_days >= stale_threshold:
+            issues.append(
+                ValidationIssue(
+                    rule="stale_price_detection",
+                    severity=Severity.WARNING,
+                    message=(
+                        f"Price appears stale for {stale_days} days (threshold {stale_threshold})"
+                    ),
+                    field="price",
+                    record_index=record_index,
+                    context={"stale_days": stale_days, "threshold": stale_threshold},
+                )
+            )
+
     return issues
