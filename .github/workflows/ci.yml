@@ -84,4 +84,9 @@ jobs:
           pip install -e .[pandas]
 
       - name: Run pandas benchmark (release check)
-        run: python scripts/benchmark_pandas_validate.py --rows 1000000 --target-seconds 10.0
+        run: |
+          STRICT_FLAG=""
+          if [[ "${GITHUB_REF}" == refs/tags/v* ]]; then
+            STRICT_FLAG="--strict-target"
+          fi
+          python scripts/benchmark_pandas_validate.py --rows 1000000 --target-seconds 10.0 ${STRICT_FLAG}

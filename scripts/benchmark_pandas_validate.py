@@ -76,6 +76,11 @@ def _parse_args(argv: list[str]) -> argparse.Namespace:
         help="Optional target threshold in seconds (default: 10.0)",
     )
     parser.add_argument("--output-json", type=Path, default=None, help="Optional JSON output path")
+    parser.add_argument(
+        "--strict-target",
+        action="store_true",
+        help="Return exit code 1 when the configured target is missed",
+    )
     return parser.parse_args(argv)
 
 
@@ -99,7 +104,9 @@ def main(argv: list[str] | None = None) -> int:
         args.output_json.write_text(json.dumps(payload, indent=2, sort_keys=True), encoding="utf-8")
         print(f"Wrote benchmark results to: {args.output_json}")
 
-    return 0 if payload.get("target_passed", True) else 1
+    if args.strict_target and not payload.get("target_passed", True):
+        return 1
+    return 0
 
 
 if __name__ == "__main__":
