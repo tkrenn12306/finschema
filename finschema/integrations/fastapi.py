@@ -23,6 +23,7 @@ except Exception as exc:  # pragma: no cover - depends on optional dependency
     ) from exc
 
 if TYPE_CHECKING:
+
     class _BaseHTTPMiddleware:
         def __init__(self, app: Any) -> None: ...
 else:
