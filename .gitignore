@@ -1,0 +1,43 @@
+# Byte-compiled / cache
+__pycache__/
+*.py[cod]
+*.so
+
+# Virtualenvs
+.venv/
+venv/
+
+# Test / tooling caches and reports
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.hypothesis/
+.coverage
+coverage.xml
+htmlcov/
+
+# Build artifacts
+dist/
+build/
+*.egg-info/
+
+# IDE/editor noise
+.vscode/
+.idea/
+.DS_Store
+
+# Environment and secrets
+.env
+.env.*
+*.pem
+*.key
+*.crt
+*.p12
+*.pfx
+
+# Local machine/runtime artifacts
+*.log
+*.sqlite3
+
+# Internal planning docs (not for public repo)
+Docs/
